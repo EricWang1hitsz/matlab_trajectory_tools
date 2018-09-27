@@ -93,6 +93,33 @@ classdef RosDataHelper < handle
             odometry.velocity_covariances = velocity_covariances;
         end
         
+        function pose_with_covariance_stamped = convertPoseWithCovarianceStampedMessages(pose_with_covariance_stamped_messages)
+            % Initializing
+            message_num = size(pose_with_covariance_stamped_messages,1);
+            times = zeros(message_num,1);
+            positions = zeros(message_num,3);
+            orientations = zeros(message_num,4);
+            pose_covariances = zeros(message_num,6,6);
+            % Looping over messages and extracting the data
+            for message_index = 1:message_num
+                message = pose_with_covariance_stamped_messages{message_index};
+                times(message_index) = seconds(message.Header.Stamp);
+                positions(message_index,:) = [message.Pose.Pose.Position.X,...
+                                             message.Pose.Pose.Position.Y,...
+                                             message.Pose.Pose.Position.Z];
+                orientations(message_index,:) = [message.Pose.Pose.Orientation.W,...
+                                                message.Pose.Pose.Orientation.X,...
+                                                message.Pose.Pose.Orientation.Y,...
+                                                message.Pose.Pose.Orientation.Z];
+                pose_covariances(message_index,:,:) = reshape(message.Pose.Covariance, 6, 6);
+            end
+            % Creating the time series for output
+            pose_with_covariance_stamped.times = times;
+            pose_with_covariance_stamped.positions = positions;
+            pose_with_covariance_stamped.orientations = orientations;
+            pose_with_covariance_stamped.pose_covariances = pose_covariances;
+        end
+        
         % Converts a set of transform stamped messages to position arrays
         function transforms = convertTransformStampedMessages(transform_stamped_messages)
             % Initializing
