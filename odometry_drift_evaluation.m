@@ -78,11 +78,12 @@ for slice_id = 0:(num_slices-1)
         dS_position = dS_position + norm(vicon_poses_slice.positions(i+1,:) - vicon_poses_slice.positions(i,:));
     end
     % TODO remove initial offset correction when alignment works properly
-    dX_orientation = norm(k_quat_log(k_quat_mult(odom_poses_slice.orientations(end,:),k_quat_inv(vicon_poses_slice.orientations(end,:)))))...
-            - norm(k_quat_log(k_quat_mult(odom_poses_slice.orientations(1,:),k_quat_inv(vicon_poses_slice.orientations(1,:)))));
-    dX_position = norm(odom_poses_slice.positions(end,:)-vicon_poses_slice.positions(end,:))...
-            - norm(odom_poses_slice.positions(1,:)-vicon_poses_slice.positions(1,:));
+    dX_orientation = norm(k_quat_log(k_quat_mult(odom_poses_slice.orientations(end,:),k_quat_inv(vicon_poses_slice_aligned.orientations(end,:)))))...
+            - norm(k_quat_log(k_quat_mult(odom_poses_slice.orientations(1,:),k_quat_inv(vicon_poses_slice_aligned.orientations(1,:)))));
+    dX_position = norm(odom_poses_slice.positions(end,:)-vicon_poses_slice_aligned.positions(end,:))...
+            - norm(odom_poses_slice.positions(1,:)-vicon_poses_slice_aligned.positions(1,:));
     
+    % TODO complain in case of negative drift
     orientation_drifts(slice_id+1) = dX_orientation/dS_orientation;
     position_drifts(slice_id+1) = dX_position/dS_position;
     
