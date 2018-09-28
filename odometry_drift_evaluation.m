@@ -3,28 +3,11 @@
 clc; close all; clear all;
 addpath(genpath(pwd));
 
-%% Parameters
-
-rosbag_path = '/home/tree/data/vicon_room/2018-09-24-15-25-06.bag';
-alignment_orientation_scaling = 1.0;
-
-tight_plot_padding = 10;
-plot_resolution = 600;
-output_path = pwd;
-plot_format = 'pdf';
-
-alignment_slice = 1;
-evaluation_slice = 300;
-plot_slices = true;
-
-trajectory_viz_step = evaluation_slice-1;
-trajectory_viz_axes_length = 0.1;
-trajectory_viz_vicon_symbol = '-k';
-trajectory_viz_odom_symbol = '-b';
-
-num_histogram_buckets = 20;
-
 %% Loading the data
+
+% params %
+rosbag_path = '/home/tree/data/vicon_room/2018-09-24-15-25-06.bag';
+%%%%%%%%%%
 
 bag_select = rosbag(rosbag_path);
 ros_data_helper = RosDataHelper();
@@ -39,28 +22,49 @@ odom_pose_with_covariance_stamped_messages = odom_pose_select.readMessages;
 odom_poses_raw = ros_data_helper.convertPoseWithCovarianceStampedMessages(odom_pose_with_covariance_stamped_messages);
 clear odom_pose_select odom_pose_with_covariance_stamped_messages;
 
-%% Resampling and slicing
-
 aligner = PoseTrajectoryAligner6Dof();
-[odom_poses, vicon_poses] = aligner.truncateAndResampleDatastreams(odom_poses_raw, vicon_poses_raw);
+[odom_poses, vicon_poses] = aligner.truncateAndResampleDatastreams(odom_poses_raw, vicon_poses_raw); % = [T_IB , T_JV]
+clear odom_poses_raw vicon_poses_raw;
 
-% TODO correct for constant offset between vicon and base measurement frames
+
 
 %% evaluating slices
+
+T_VB = Transformation();
+
+% params %
+T_VB.initializeFromMatrix([1 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 1]); %.setData([1 0 0 0], [0 0 0]); % TODO
+vicon_poses.applyStaticTransformRHS(T_VB);
+alignment_slice = 50;
+evaluation_slice = 300;
+alignment_orientation_scaling = 10.0;
+tight_plot_padding = 10;
+plot_resolution = 600;
+output_path = pwd;
+plot_format = 'pdf';
+trajectory_viz_step = evaluation_slice-1;
+trajectory_viz_axes_length = 0.1;
+trajectory_viz_vicon_symbol = '-k';
+trajectory_viz_odom_symbol = '-b';
+num_histogram_buckets = 20;
+plot_slices = true;
+%%%%%%%%%%
 
 num_slices = floor(odom_poses.length/evaluation_slice);
 
 orientation_drifts = zeros(num_slices,1);
 position_drifts = zeros(num_slices,1);
 
-for slice_id = 0:(num_slices-1)
+for slice_id = 1:num_slices
 
-    start_index = 1+slice_id*evaluation_slice;
-    end_index = (1+slice_id)*evaluation_slice;
+    start_index = 1+(slice_id-1)*evaluation_slice;
+    end_index = slice_id*evaluation_slice;
     odom_poses_slice = odom_poses.getWindowedTrajectory(start_index, end_index);
     vicon_poses_slice = vicon_poses.getWindowedTrajectory(start_index, end_index);
     
-    T_alignment = aligner.calculateAlignmentTransform(odom_poses_slice.getWindowedTrajectory(1, alignment_slice), vicon_poses_slice.getWindowedTrajectory(1, alignment_slice), alignment_orientation_scaling);
+    T_alignment = aligner.calculateAlignmentTransform(odom_poses_slice.getWindowedTrajectory(1, alignment_slice),...
+                                                      vicon_poses_slice.getWindowedTrajectory(1, alignment_slice),...
+                                                      alignment_orientation_scaling);
 
     start_time = min([odom_poses_slice.times(1) vicon_poses_slice.times(1)]);
     vicon_poses_slice = TransformationTrajectory(vicon_poses_slice.orientations,...
@@ -73,25 +77,30 @@ for slice_id = 0:(num_slices-1)
     
     dS_orientation = 0;
     dS_position = 0;
-    for i=1:vicon_poses_slice.length-1
-        dS_orientation = dS_orientation + norm(k_quat_log(k_quat_mult(vicon_poses_slice.orientations(i+1,:),k_quat_inv(vicon_poses_slice.orientations(i,:)))));
-        dS_position = dS_position + norm(vicon_poses_slice.positions(i+1,:) - vicon_poses_slice.positions(i,:));
+    for i=1:vicon_poses_slice_aligned.length-1
+        dS_orientation = dS_orientation + norm(k_quat_diff(vicon_poses_slice_aligned.orientations(i+1,:),...
+                                                           vicon_poses_slice_aligned.orientations(i,:)));
+        dS_position = dS_position + norm(vicon_poses_slice_aligned.positions(i+1,:)...
+                                         - vicon_poses_slice_aligned.positions(i,:));
     end
-    % TODO remove initial offset correction when alignment works properly
-    dX_orientation = norm(k_quat_log(k_quat_mult(odom_poses_slice.orientations(end,:),k_quat_inv(vicon_poses_slice_aligned.orientations(end,:)))))...
-            - norm(k_quat_log(k_quat_mult(odom_poses_slice.orientations(1,:),k_quat_inv(vicon_poses_slice_aligned.orientations(1,:)))));
-    dX_position = norm(odom_poses_slice.positions(end,:)-vicon_poses_slice_aligned.positions(end,:))...
-            - norm(odom_poses_slice.positions(1,:)-vicon_poses_slice_aligned.positions(1,:));
-    
-    % TODO complain in case of negative drift
-    orientation_drifts(slice_id+1) = dX_orientation/dS_orientation;
-    position_drifts(slice_id+1) = dX_position/dS_position;
+    dX_orientation = norm(k_quat_diff(odom_poses_slice.orientations(end,:),...
+                                      vicon_poses_slice_aligned.orientations(end,:)));
+    dX_orientation_init = norm(k_quat_diff(odom_poses_slice.orientations(1,:),...
+                                           vicon_poses_slice_aligned.orientations(1,:)));
+                 
+    dX_position = norm(odom_poses_slice.positions(end,:)...
+                       - vicon_poses_slice_aligned.positions(end,:));
+    dX_position_init = norm(odom_poses_slice.positions(1,:)...
+                            - vicon_poses_slice_aligned.positions(1,:));
+                        
+    orientation_drifts(slice_id) = dX_orientation/dS_orientation;
+    position_drifts(slice_id) = dX_position/dS_position;
     
     if (plot_slices)
-        h=figure(slice_id+1);
+        h=figure(slice_id);
         set(gcf,'Visible', 'off');
         subplot(1,1,1)
-        title(['Orientation/position drift: ' num2str(orientation_drifts(slice_id+1)) '/' num2str(position_drifts(slice_id+1))]);
+        title(['Orientation/position drift: ' num2str(orientation_drifts(slice_id)) '/' num2str(position_drifts(slice_id))]);
         vicon_poses_slice_aligned.plot(trajectory_viz_step, trajectory_viz_axes_length, trajectory_viz_vicon_symbol)
         hold on
         odom_poses_slice.plot(trajectory_viz_step, trajectory_viz_axes_length, trajectory_viz_odom_symbol)
@@ -102,8 +111,6 @@ for slice_id = 0:(num_slices-1)
         close all; clear h;
     end
 end
-
-%% visualization
 
 h=figure();
 subplot(1,2,1)
