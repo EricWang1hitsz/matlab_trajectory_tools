@@ -1,4 +1,4 @@
-function [] = ase_drift_analysis(duration, rosbag_path, output_path, data_id)
+function [] = ase_drift_analysis(duration, dS_position_per_slice, dS_orientation_per_slice, rosbag_path, output_path, data_id)
 
 %% Parameters
 
@@ -12,12 +12,10 @@ plot_format = 'pdf';
 trajectory_viz_axes_length = 0.1;
 trajectory_viz_vicon_symbol = '-k';
 trajectory_viz_odom_symbol = '-b';
-num_histogram_buckets = 30;
+num_histogram_buckets = 20;
 plot_slices = true;
 odom_frequency = 400;
 odom_msg_skip = 2;
-dS_position_per_slice = 0.5;
-dS_orientation_per_slice = pi/4;
 orientation_alignment_threshold = 0.017;
 position_alignment_threshold = 0.02;
 
@@ -28,8 +26,12 @@ bag_select = rosbag(rosbag_path);
 ros_data_helper = RosDataHelper();
 
 odom_pose_select = select(bag_select, 'Topic', '/state_estimator/pose_in_odom');
-if (odom_pose_select.NumMessages < num_odom_msgs)
-    display(['Number of requested odometry msgs exceeds number of msgs in bag (' num2str(odom_pose_select.NumMessages) '<' num2str(num_odom_msgs) ')!'])
+if (num_odom_msgs < 0)
+    num_odom_msgs = odom_pose_select.NumMessages;
+else
+    if (odom_pose_select.NumMessages < num_odom_msgs)
+        disp(['Number of requested odometry msgs exceeds number of msgs in bag (' num2str(odom_pose_select.NumMessages) '<' num2str(num_odom_msgs) ')!'])
+    end
 end
 odom_pose_with_covariance_stamped_messages = odom_pose_select.readMessages([1:odom_msg_skip:num_odom_msgs]);
 odom_poses_raw = ros_data_helper.convertPoseWithCovarianceStampedMessages(odom_pose_with_covariance_stamped_messages);
@@ -40,7 +42,11 @@ vicon_transform_stamped_messages = vicon_pose_select.readMessages;
 vicon_poses_raw = ros_data_helper.convertTransformStampedMessages(vicon_transform_stamped_messages);
 clear vicon_pose_select vicon_transform_stamped_messages;
 
-aligner = PoseTrajectoryAligner6Dof();
+if (alignment_slice_length == 1)
+    aligner = PoseTrajectoryAlignerFirstPose();
+else
+    aligner = PoseTrajectoryAligner6Dof();
+end
 [odom_poses, vicon_poses] = aligner.truncateAndResampleDatastreams(odom_poses_raw, vicon_poses_raw); % = [T_IB , T_JV]
 clear odom_poses_raw vicon_poses_raw;
 
@@ -63,9 +69,9 @@ for i = 1:vicon_poses.length-1
                                      - vicon_poses.positions(i,:));
                                      
     if (dS_orientation > dS_orientation_per_slice)
-        slice_length = i - pre_orientation_index;
+        slice_length = i - pre_orientation_index + 1;
         
-        if (slice_length > alignment_slice_length) 
+        if (slice_length >= alignment_slice_length) 
             
             odom_poses_slice = odom_poses.getWindowedTrajectory(pre_orientation_index, i+1);
             vicon_poses_slice = vicon_poses.getWindowedTrajectory(pre_orientation_index, i+1);
@@ -91,18 +97,26 @@ for i = 1:vicon_poses.length-1
                                               vicon_poses_slice_aligned.orientations(1,:));
             dX_position_init = odom_poses_slice.positions(1,:)...
                                - vicon_poses_slice_aligned.positions(1,:);
-            
+                          
             if((norm(dX_orientation_init) < orientation_alignment_threshold) && (norm(dX_position_init) < position_alignment_threshold))
                 if((norm(dX_position_init) < norm(dX_position_final)) && (norm(dX_orientation_init) < norm(dX_orientation_final)))
-                    cur_orientation_drift = norm(dX_orientation_final - dX_orientation_init)/dS_orientation;
+                    cur_orientation_drift = norm(dX_orientation_final)/dS_orientation;
                     orientation_drifts = [orientation_drifts; cur_orientation_drift];
 
+%                     if(norm(dX_orientation_final)>1)
+%                         odom_poses_slice.orientations(end,:)
+%                         vicon_poses_slice_aligned.orientations(end,:)
+%                         dX_orientation_final
+%                         dS_orientation
+%                         cur_orientation_drift
+%                     end
+                    
                     if (plot_slices)
                         close all;
                         h=figure();
                         set(gcf,'Visible', 'off');
                         subplot(1,1,1)
-                        title(['Orientation drift: ' num2str(round(cur_orientation_drift,3))]);
+                        title(['Orientation drift during ' num2str(slice_length) ' iterations: ' num2str(round(cur_orientation_drift,3))]);
                         vicon_poses_slice_aligned.plot(vicon_poses_slice_aligned.length-1, trajectory_viz_axes_length, trajectory_viz_vicon_symbol)
                         hold on
                         odom_poses_slice.plot(odom_poses_slice.length-1, trajectory_viz_axes_length, trajectory_viz_odom_symbol)
@@ -122,7 +136,7 @@ for i = 1:vicon_poses.length-1
                 disp('Initial alignment error exceeds threshold!');
             end
         else
-            disp(['Number of iterations in orientation slice is smaller than alignment slice length (' num2str(pre_orientation_index) '>' num2str(alignment_slice_length) ')!'])
+            disp(['Number of iterations in orientation slice is smaller than alignment slice length (' num2str(slice_length) '<' num2str(alignment_slice_length) ')!'])
         end
         
         pre_orientation_index = i+1;
@@ -130,9 +144,9 @@ for i = 1:vicon_poses.length-1
     end
                                  
     if (dS_position > dS_position_per_slice)
-        slice_length = i - pre_position_index;
+        slice_length = i - pre_position_index + 1;
         
-        if (slice_length > alignment_slice_length) 
+        if (slice_length >= alignment_slice_length) 
             
             odom_poses_slice = odom_poses.getWindowedTrajectory(pre_position_index, i+1);
             vicon_poses_slice = vicon_poses.getWindowedTrajectory(pre_position_index, i+1);
@@ -161,7 +175,7 @@ for i = 1:vicon_poses.length-1
             
             if((norm(dX_orientation_init) < orientation_alignment_threshold) && (norm(dX_position_init) < position_alignment_threshold))
                 if((norm(dX_position_init) < norm(dX_position_final)) && (norm(dX_orientation_init) < norm(dX_orientation_final)))
-                    cur_position_drift = norm(dX_position_final - dX_position_init)/dS_position;
+                    cur_position_drift = norm(dX_position_final)/dS_position;
                     position_drifts = [position_drifts; cur_position_drift];
 
                     if (plot_slices)
@@ -169,7 +183,7 @@ for i = 1:vicon_poses.length-1
                         h=figure();
                         set(gcf,'Visible', 'off');
                         subplot(1,1,1)
-                        title(['Position drift: ' num2str(round(cur_position_drift,3))]);
+                        title(['Position drift during ' num2str(slice_length) ' iterations: ' num2str(round(cur_position_drift,3))]);
                         vicon_poses_slice_aligned.plot(vicon_poses_slice_aligned.length-1, trajectory_viz_axes_length, trajectory_viz_vicon_symbol)
                         hold on
                         odom_poses_slice.plot(odom_poses_slice.length-1, trajectory_viz_axes_length, trajectory_viz_odom_symbol)
@@ -189,7 +203,7 @@ for i = 1:vicon_poses.length-1
                 disp('Initial alignment error exceeds threshold!');
             end
         else
-            disp(['Number of iterations in position slice is smaller than alignment slice length (' num2str(pre_position_index) '>' num2str(alignment_slice_length) ')!'])
+            disp(['Number of iterations in position slice is smaller than alignment slice length (' num2str(slice_length) '<' num2str(alignment_slice_length) ')!'])
         end
         
         pre_position_index = i+1;
