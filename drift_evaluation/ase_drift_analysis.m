@@ -63,8 +63,8 @@ pre_position_index = 1;
 
 for i = 1:vicon_poses.length-1
 
-    dS_orientation = dS_orientation + norm(k_quat_diff(vicon_poses.orientations(i+1,:),...
-                                                       vicon_poses.orientations(i,:)));
+    dS_orientation = dS_orientation + k_quat_diff_mag(vicon_poses.orientations(i+1,:),...
+                                                      vicon_poses.orientations(i,:));
     dS_position = dS_position + norm(vicon_poses.positions(i+1,:)...
                                      - vicon_poses.positions(i,:));
                                      
@@ -91,25 +91,22 @@ for i = 1:vicon_poses.length-1
             
             dX_orientation_final = k_quat_diff(odom_poses_slice.orientations(end,:),...
                                                vicon_poses_slice_aligned.orientations(end,:));
+            dX_orientation_final_norm = k_quat_diff_mag(odom_poses_slice.orientations(end,:),...
+                                                         vicon_poses_slice_aligned.orientations(end,:));
             dX_position_final = odom_poses_slice.positions(end,:)...
                                 - vicon_poses_slice_aligned.positions(end,:);
+                            
             dX_orientation_init = k_quat_diff(odom_poses_slice.orientations(1,:),...
                                               vicon_poses_slice_aligned.orientations(1,:));
+            dX_orientation_init_norm = k_quat_diff_mag(odom_poses_slice.orientations(1,:),...
+                                                        vicon_poses_slice_aligned.orientations(1,:));
             dX_position_init = odom_poses_slice.positions(1,:)...
                                - vicon_poses_slice_aligned.positions(1,:);
                           
-            if((norm(dX_orientation_init) < orientation_alignment_threshold) && (norm(dX_position_init) < position_alignment_threshold))
-                if((norm(dX_position_init) < norm(dX_position_final)) && (norm(dX_orientation_init) < norm(dX_orientation_final)))
-                    cur_orientation_drift = norm(dX_orientation_final)/dS_orientation;
+            if((dX_orientation_init_norm < orientation_alignment_threshold) && (norm(dX_position_init) < position_alignment_threshold))
+                if((norm(dX_position_init) < norm(dX_position_final)) && (dX_orientation_init_norm < dX_orientation_final_norm))
+                    cur_orientation_drift = dX_orientation_final_norm/dS_orientation;
                     orientation_drifts = [orientation_drifts; cur_orientation_drift];
-
-%                     if(norm(dX_orientation_final)>1)
-%                         odom_poses_slice.orientations(end,:)
-%                         vicon_poses_slice_aligned.orientations(end,:)
-%                         dX_orientation_final
-%                         dS_orientation
-%                         cur_orientation_drift
-%                     end
                     
                     if (plot_slices)
                         close all;
@@ -166,15 +163,20 @@ for i = 1:vicon_poses.length-1
             
             dX_orientation_final = k_quat_diff(odom_poses_slice.orientations(end,:),...
                                                vicon_poses_slice_aligned.orientations(end,:));
+            dX_orientation_final_norm = k_quat_diff_mag(odom_poses_slice.orientations(end,:),...
+                                                         vicon_poses_slice_aligned.orientations(end,:));
             dX_position_final = odom_poses_slice.positions(end,:)...
                                 - vicon_poses_slice_aligned.positions(end,:);
+                            
             dX_orientation_init = k_quat_diff(odom_poses_slice.orientations(1,:),...
                                               vicon_poses_slice_aligned.orientations(1,:));
+            dX_orientation_init_norm = k_quat_diff_mag(odom_poses_slice.orientations(1,:),...
+                                                        vicon_poses_slice_aligned.orientations(1,:));
             dX_position_init = odom_poses_slice.positions(1,:)...
                                - vicon_poses_slice_aligned.positions(1,:);
             
-            if((norm(dX_orientation_init) < orientation_alignment_threshold) && (norm(dX_position_init) < position_alignment_threshold))
-                if((norm(dX_position_init) < norm(dX_position_final)) && (norm(dX_orientation_init) < norm(dX_orientation_final)))
+            if((dX_orientation_init_norm < orientation_alignment_threshold) && (norm(dX_position_init) < position_alignment_threshold))
+                if((norm(dX_position_init) < norm(dX_position_final)) && (dX_orientation_init_norm < dX_orientation_final_norm))
                     cur_position_drift = norm(dX_position_final)/dS_position;
                     position_drifts = [position_drifts; cur_position_drift];
 
