@@ -6,5 +6,5 @@ function [] = poses2csv(otput_file, poses)
     data(:, 2:4) = poses.positions;
     data(:, 5:7) = poses.orientations(:, 2:4);
     data(:, 8) = poses.orientations(:, 1);
-    dlmwrite(otput_file, data,'delimiter',',','precision',10)
+    dlmwrite(otput_file, data,'delimiter',',','precision',10);
 end
