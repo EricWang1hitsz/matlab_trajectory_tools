@@ -2,7 +2,8 @@ function [] = drift_analysis(topic_config,... % T_IB (odometry), T_JV (groundtru
                              T_VB,...
                              dS_position_per_slice,...
                              dS_orientation_per_slice,...
-                             output_path)
+                             output_path,...
+                             varargin)
 
 %% Parameters and prep
           
@@ -13,11 +14,14 @@ trajectory_viz_axes_length = 0.1;
 trajectory_viz_groundtruth_symbol = ':k';
 trajectory_viz_odom_symbol = '-k';
 num_histogram_buckets = 20;
-plot_slices = true;
+plot_slices = false;
 plot_histogram = true;
 plot_aligned_trajectories = true;
 aligner = PoseTrajectoryAlignerFirstPose();
 fast_groundtruth = false;
+if (length(varargin) == 1)
+    fast_groundtruth = varargin{1};
+end
 
 %% Loading the data
 
@@ -74,7 +78,9 @@ for i = 1:groundtruth_poses.length-1
                 set(gcf,'Visible', 'off');
                 subplot(1,1,1)
                 title(['Orientation drift during ' num2str(slice_length) ' iterations: ' num2str(round(cur_orientation_drift,3))]);
-                groundtruth_poses_slice_aligned.plot(groundtruth_poses_slice_aligned.length-1, trajectory_viz_axes_length, trajectory_viz_groundtruth_symbol)
+                groundtruth_poses_slice_aligned.plot(groundtruth_poses_slice_aligned.length-1,...
+                                                     trajectory_viz_axes_length,...
+                                                     trajectory_viz_groundtruth_symbol)
                 hold on
                 odom_poses_slice.plot(odom_poses_slice.length-1, trajectory_viz_axes_length, trajectory_viz_odom_symbol)
                 hold off
@@ -83,7 +89,8 @@ for i = 1:groundtruth_poses.length-1
                 xlabel('_{I}x [m]');
                 ylabel('_{I}y [m]');
                 lineobjects = findobj(gca,'Type','line');
-                legend([lineobjects(3) lineobjects(6)],{'Odometry','Ground truth'});
+                legend([lineobjects(3) lineobjects(6)],{[topic_config(1).pose_id ' odometry'],[topic_config(2).pose_id ' ground truth']},...
+                       'Interpreter', 'None');
                 saveTightFigure(h,...
                                 [output_path '/' topic_config(1).pose_id '_orientation_alignment_slice_' num2str(size(orientation_drifts,1))],...
                                 plot_format,...
@@ -125,7 +132,9 @@ for i = 1:groundtruth_poses.length-1
                 set(gcf,'Visible', 'off');
                 subplot(1,1,1)
                 title(['Position drift during ' num2str(slice_length) ' iterations: ' num2str(round(cur_position_drift,3))]);
-                groundtruth_poses_slice_aligned.plot(groundtruth_poses_slice_aligned.length-1, trajectory_viz_axes_length, trajectory_viz_groundtruth_symbol)
+                groundtruth_poses_slice_aligned.plot(groundtruth_poses_slice_aligned.length-1,...
+                                                     trajectory_viz_axes_length,...
+                                                     trajectory_viz_groundtruth_symbol)
                 hold on
                 odom_poses_slice.plot(odom_poses_slice.length-1, trajectory_viz_axes_length, trajectory_viz_odom_symbol)
                 hold off
@@ -134,7 +143,8 @@ for i = 1:groundtruth_poses.length-1
                 xlabel('_{I}x [m]');
                 ylabel('_{I}y [m]');
                 lineobjects = findobj(gca,'Type','line');
-                legend([lineobjects(3) lineobjects(6)],{'Odometry','Ground truth'});
+                legend([lineobjects(3) lineobjects(6)],{[topic_config(1).pose_id ' odometry'],[topic_config(2).pose_id ' ground truth']},...
+                       'Interpreter', 'None');
                 saveTightFigure(h,...
                                 [output_path '/' topic_config(1).pose_id '_position_alignment_slice_' num2str(size(position_drifts,1))],...
                                 plot_format,...
@@ -157,12 +167,16 @@ if(plot_histogram)
     subplot(1,2,1)
     set(gcf,'Visible', 'off');
     histogram(orientation_drifts, num_histogram_buckets);
-    title(['Orientation drift mean/std/N: ' num2str(round(mean(orientation_drifts), 3)) '/' num2str(round(std(orientation_drifts), 3)) '/' num2str(size(orientation_drifts,1))]);
+    title({['Orientation drift mean/std/N: ' num2str(round(mean(orientation_drifts), 3)) '/'...
+          num2str(round(std(orientation_drifts), 3)) '/'...
+          num2str(size(orientation_drifts,1))], ['for ' topic_config(1).pose_id], ' '}, 'Interpreter', 'none');
     xlabel('Drift [1]');
     ylabel('n [1]');
     subplot(1,2,2)
     histogram(position_drifts, num_histogram_buckets);
-    title(['Position drift mean/std/N: ' num2str(round(mean(position_drifts), 3)) '/' num2str(round(std(position_drifts), 3)) '/' num2str(size(position_drifts,1))]);
+    title({['Position drift mean/std/N: ' num2str(round(mean(position_drifts), 3)) '/'...
+          num2str(round(std(position_drifts), 3)) '/'...
+          num2str(size(position_drifts,1))], ['for ' topic_config(1).pose_id], ' '}, 'Interpreter', 'none');
     xlabel('Drift [1]');
     ylabel('n [1]');
     saveTightFigure(h,...
@@ -213,7 +227,8 @@ if(plot_aligned_trajectories)
     ylabel('_{I}y [m]');
     zlabel('_{I}z [m]');
     lineobjects = findobj(gca,'Type','line');
-    legend([lineobjects(3) lineobjects(6)],{'Odometry','Ground truth'});
+    legend([lineobjects(3) lineobjects(6)],{[topic_config(1).pose_id ' odometry'],[topic_config(2).pose_id ' ground truth']},...
+           'Interpreter', 'None', 'Location', 'southoutside');
     hold off
     saveTightFigure(h,...
                     [output_path '/' topic_config(1).pose_id '_trajectories'],...

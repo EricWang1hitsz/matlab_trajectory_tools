@@ -1,6 +1,7 @@
 function [] = drift_analysis(topic_config,... % T_IB (validation), T_JV (groundtruth localization)
                              T_VB,...
-                             output_path)
+                             output_path,...
+                             varargin) % fast_groundtruth, use_first_pose_aligner
 
 %% Parameters and prep
           
@@ -11,7 +12,17 @@ trajectory_viz_groundtruth_symbol = ':k';
 trajectory_viz_validation_symbol = '-k';
 aligner = PoseTrajectoryAligner6Dof();
 alignment_orientation_weight = 1.;
-fast_groundtruth = true;
+fast_groundtruth = false;
+if (length(varargin) == 1)
+    fast_groundtruth = varargin{1};
+elseif (length(varargin) == 2)
+    fast_groundtruth = varargin{1};
+    if (varargin{2})
+        aligner = PoseTrajectoryAlignerFirstPose();
+    else
+        aligner = PoseTrajectoryAligner6Dof();
+    end 
+end
 
 %% Loading the data
 
@@ -49,7 +60,7 @@ plot3(groundtruth_poses_aligned.positions(1,1),...
 plot3(groundtruth_poses_aligned.positions(end,1),...
       groundtruth_poses_aligned.positions(end,2),...
       groundtruth_poses_aligned.positions(end,3), 'ro');
-title(['Position/orientation RMSE over full trajectory: ' num2str(round(position_rmse,3)) 'm/' num2str(round(orientation_rmse,3)) 'deg']);
+title(['Position/orientation RMSE over full trajectory: ' num2str(round(position_rmse,3)) 'cm/' num2str(round(orientation_rmse,3)) 'deg']);
 plot3(validation_poses.positions(:,1),...
       validation_poses.positions(:,2),...
       validation_poses.positions(:,3), trajectory_viz_validation_symbol);
@@ -65,7 +76,8 @@ xlabel('_{I}x [m]');
 ylabel('_{I}y [m]');
 zlabel('_{I}z [m]');
 lineobjects = findobj(gca,'Type','line');
-legend([lineobjects(3) lineobjects(6)],{'Validation','Ground truth'});
+legend([lineobjects(3) lineobjects(6)],{[topic_config(1).pose_id ' validation'],[topic_config(2).pose_id ' ground truth']},...
+       'Interpreter', 'None', 'Location', 'southoutside');
 hold off
 saveTightFigure(h,...
                 [output_path '/' topic_config(1).pose_id '_trajectories'],...
