@@ -33,6 +33,11 @@ function [poses] = bags2poses(config)
             poses(i).times = tmp_poses.times;
             poses(i).positions = tmp_poses.positions;
             poses(i).orientations = tmp_poses.orientations;
+        elseif (strcmp(config(i).msg_type,'PointStamped'))
+            tmp_poses = ros_data_helper.convertPointStampedMessages(ros_msgs);
+            poses(i).times = tmp_poses.times;
+            poses(i).positions = tmp_poses.points;
+            poses(i).orientations = [1, 0, 0, 0];
         else
             disp(['Unknown msg type "' config(i).msg_type '" for pose ' num2str(i) '!']);
         end

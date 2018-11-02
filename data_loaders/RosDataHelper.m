@@ -17,21 +17,21 @@ classdef RosDataHelper < handle
     
     methods(Static)
        
-        % Converts a set of position stamped messages to arrays
-        function positions_stamped = convertPositionStampedMessages(position_stamped_messages)
+        % Converts a set of point stamped messages to arrays
+        function points_stamped = convertPointStampedMessages(point_stamped_messages)
             % Initializing
-            message_num = size(position_stamped_messages,1);
+            message_num = size(point_stamped_messages,1);
             times = zeros(message_num,1);
-            positions = zeros(message_num,3);
+            points = zeros(message_num,3);
             % Looping over messages and extracting the data
             for message_index = 1:message_num
-                message = position_stamped_messages{message_index};
+                message = point_stamped_messages{message_index};
                 times(message_index) = seconds(message.Header.Stamp);
-                positions(message_index,:) = [message.Point.X, message.Point.Y, message.Point.Z];
+                points(message_index,:) = [message.Point.X, message.Point.Y, message.Point.Z];
             end
             % Creating the time series for output
-            positions_stamped.times = times;
-            positions_stamped.positions = positions;
+            points_stamped.times = times;
+            points_stamped.points = points;
         end
         
         % TODO(millane) Convert the whole message not just part of it.

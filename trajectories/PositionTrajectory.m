@@ -50,6 +50,18 @@ classdef PositionTrajectory < handle & matlab.mixin.Copyable
             obj.setData(obj.positions(start_index:end_index, :),...
                         obj.times(start_index:end_index));
         end
+
+        % Gets a windowed portion of this trajectory
+        function windowed_trajectory = getWindowedTrajectory(obj, start_index, end_index)
+            % Checks
+            assert(start_index >= 1, 'Start index should be greater than 1.');
+            assert(end_index <= obj.length, 'End index should be less than length.');
+            % Creating the timeseries
+            windowed_times = obj.times(start_index:end_index);
+            windowed_positions = obj.positions(start_index:end_index,:);
+            % Creating the trajectory object
+            windowed_trajectory = PositionTrajectory(windowed_positions, windowed_times);
+        end
         
         % Resamples the trajectory at the passed times
         function resample(obj, times)
