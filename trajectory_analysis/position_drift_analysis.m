@@ -6,7 +6,8 @@ function [] = position_drift_analysis(topic_config,... % T_IB (odometry), T_JV (
 %% Parameters and prep
           
 tight_plot_padding = 10;
-minimal_local_alignment_slice_length = 10;
+initial_cut_length = 100;
+local_alignment_slice_length = 15;
 global_alignment_slice_length = 500;
 plot_resolution = 500;
 plot_format = 'jpeg';
@@ -32,6 +33,9 @@ else
     [odom_poses, groundtruth_poses] = aligner.truncateAndResampleDatastreams(poses(1), poses(2));
 end
 
+odom_poses = odom_poses.getWindowedTrajectory(initial_cut_length, odom_poses.length);
+groundtruth_poses = groundtruth_poses.getWindowedTrajectory(initial_cut_length, groundtruth_poses.length);
+
 %% Evaluating slices
 
 position_drifts = zeros(0,0);
@@ -49,45 +53,49 @@ for i = 1:groundtruth_poses.length-1
     if (dS_position > dS_position_per_slice)
         slice_length = i - pre_position_index + 1;
 
-        if(slice_length > 2*minimal_local_alignment_slice_length)
+        if(slice_length > 2*local_alignment_slice_length)
             odom_poses_slice = odom_poses.getWindowedTrajectory(pre_position_index, i+1);
             groundtruth_poses_slice = groundtruth_poses.getWindowedTrajectory(pre_position_index, i+1);
 
-            T_alignment = aligner.calculateAlignmentTransform(odom_poses_slice.getWindowedTrajectory(1, minimal_local_alignment_slice_length),...
-                                                              groundtruth_poses_slice.getWindowedTrajectory(1, minimal_local_alignment_slice_length));
+            T_alignment = aligner.calculateAlignmentTransform(odom_poses_slice.getWindowedTrajectory(1, local_alignment_slice_length),...
+                                                              groundtruth_poses_slice.getWindowedTrajectory(1, local_alignment_slice_length));
 
             groundtruth_poses_slice_aligned = groundtruth_poses_slice.applyStaticTransformLHS(T_alignment);
 
+            dX_position_initial_norm = norm(odom_poses_slice.positions(1,:)...
+                                          - groundtruth_poses_slice_aligned.positions(1,:));
             dX_position_final_norm = norm(odom_poses_slice.positions(end,:)...
                                           - groundtruth_poses_slice_aligned.positions(end,:));
+            if (dX_position_initial_norm<dX_position_final_norm)
+                cur_position_drift = dX_position_final_norm/dS_position;
+                position_drifts = [position_drifts; cur_position_drift];
 
-            cur_position_drift = dX_position_final_norm/dS_position;
-            position_drifts = [position_drifts; cur_position_drift];
-
-            if (plot_slices)
-                close all;
-                h=figure();
-                set(gcf,'Visible', 'off');
-                subplot(1,1,1)
-                title(['Position drift during ' num2str(slice_length) ' iterations: ' num2str(round(cur_position_drift,3))]);
-                groundtruth_poses_slice_aligned.plot(trajectory_viz_groundtruth_symbol)
-                hold on
-                odom_poses_slice.plot(trajectory_viz_odom_symbol)
-                hold off
-                axis equal
-                grid on
-                xlabel('_{I}x [m]');
-                ylabel('_{I}y [m]');
-                lineobjects = findobj(gca,'Type','line');
-                legend([lineobjects(3) lineobjects(6)],{[topic_config(1).pose_id ' odometry'],[topic_config(2).pose_id ' ground truth']},...
-                       'Interpreter', 'None');
-                saveTightFigure(h,...
-                                [output_path '/' topic_config(1).pose_id '_position_alignment_slice_' num2str(size(position_drifts,1))],...
-                                plot_format,...
-                                plot_resolution,...
-                                tight_plot_padding);
+                if (plot_slices)
+                    close all;
+                    h=figure();
+                    set(gcf,'Visible', 'off');
+                    subplot(1,1,1)
+                    title(['Position drift during ' num2str(slice_length) ' iterations: ' num2str(round(cur_position_drift,3))]);
+                    groundtruth_poses_slice_aligned.plot(trajectory_viz_groundtruth_symbol)
+                    hold on
+                    odom_poses_slice.plot(trajectory_viz_odom_symbol)
+                    hold off
+                    axis equal
+                    grid on
+                    xlabel('_{I}x [m]');
+                    ylabel('_{I}y [m]');
+                    lineobjects = findobj(gca,'Type','line');
+                    legend([lineobjects(3) lineobjects(6)],{[topic_config(1).pose_id ' odometry'],[topic_config(2).pose_id ' ground truth']},...
+                           'Interpreter', 'None');
+                    saveTightFigure(h,...
+                                    [output_path '/' topic_config(1).pose_id '_position_alignment_slice_' num2str(size(position_drifts,1))],...
+                                    plot_format,...
+                                    plot_resolution,...
+                                    tight_plot_padding);
+                end
+            else
+                disp(['Alignment failed, skipping slice!'])
             end
-        
         else
             disp(['Number of iterations in orientation slice is smaller than twice alignment slice length!'])
         end
